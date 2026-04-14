@@ -1,4 +1,5 @@
-import { chromium } from 'playwright'
+// Import dinamico per evitare che Next.js traci Playwright nel bundle Vercel.
+// Lo scraping gira solo in locale (Vercel serverless non supporta Chromium).
 
 export type ScrapedLead = {
   company_name: string
@@ -28,6 +29,10 @@ export async function scrapeGoogleMaps(
 ): Promise<ScrapedLead[]> {
   const log = (m: string) => onProgress?.(m)
   log(`[${category}] Avvio browser…`)
+
+  // Import dinamico: non viene risolto da Next.js a build-time
+  const playwrightModule = 'playwright'
+  const { chromium } = (await import(/* webpackIgnore: true */ playwrightModule)) as typeof import('playwright')
 
   const browser = await chromium.launch({ headless: true })
   const context = await browser.newContext({
