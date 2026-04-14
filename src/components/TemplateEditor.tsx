@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createBrowserClient, type EmailTemplate } from '@/lib/supabase'
+import { type EmailTemplate } from '@/lib/supabase'
 
 export default function TemplateEditor() {
   const [template, setTemplate] = useState<EmailTemplate | null>(null)
@@ -16,14 +16,10 @@ export default function TemplateEditor() {
 
   async function load() {
     try {
-      const supabase = createBrowserClient()
-      const { data } = await supabase
-        .from('email_templates')
-        .select('*')
-        .eq('is_default', true)
-        .single()
-      if (data) {
-        const t = data as EmailTemplate
+      const res = await fetch('/api/templates', { cache: 'no-store' })
+      const data = await res.json()
+      if (res.ok && data.template) {
+        const t = data.template as EmailTemplate
         setTemplate(t)
         setSubject(t.subject)
         setBody(t.body)
@@ -35,11 +31,11 @@ export default function TemplateEditor() {
     if (!template) return
     setLoading(true)
     try {
-      const supabase = createBrowserClient()
-      await supabase
-        .from('email_templates')
-        .update({ subject, body })
-        .eq('id', template.id)
+      await fetch('/api/templates', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: template.id, subject, body }),
+      })
     } finally {
       setLoading(false)
     }

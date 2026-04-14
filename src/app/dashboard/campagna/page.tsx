@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createBrowserClient, type Campaign } from '@/lib/supabase'
+import { type Campaign } from '@/lib/supabase'
 import { CATEGORY_GROUPS } from '@/lib/categories'
 
 export default function CampagnaPage() {
@@ -22,12 +22,9 @@ export default function CampagnaPage() {
 
   async function loadCampaigns() {
     try {
-      const supabase = createBrowserClient()
-      const { data } = await supabase
-        .from('campaigns')
-        .select('*')
-        .order('created_at', { ascending: false })
-      setCampaigns((data as Campaign[]) || [])
+      const res = await fetch('/api/campaigns', { cache: 'no-store' })
+      const data = await res.json()
+      if (res.ok) setCampaigns((data.campaigns as Campaign[]) || [])
     } catch {}
   }
 
@@ -66,20 +63,23 @@ export default function CampagnaPage() {
     setRunning(true)
     setLogs([])
     try {
-      const supabase = createBrowserClient()
-      const { data: created, error } = await supabase
-        .from('campaigns')
-        .insert({
+      const createRes = await fetch('/api/campaigns', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           name: name || `${city} · ${categories.length} cat.`,
           category: categories.join(', '),
           city,
           daily_limit: dailyLimit,
-        })
-        .select()
-        .single()
-      if (error || !created) throw new Error(error?.message || 'Errore creazione campagna')
-      setCurrentCampaign(created as Campaign)
-      appendLog(`📁 Campagna creata: ${(created as Campaign).name}`)
+        }),
+      })
+      const createData = await createRes.json()
+      if (!createRes.ok || !createData.campaign) {
+        throw new Error(createData.error || 'Errore creazione campagna')
+      }
+      const created = createData.campaign as Campaign
+      setCurrentCampaign(created)
+      appendLog(`📁 Campagna creata: ${created.name}`)
 
       const res = await fetch('/api/scrape', {
         method: 'POST',
@@ -88,7 +88,7 @@ export default function CampagnaPage() {
           categories,
           city,
           limit,
-          campaignId: (created as Campaign).id,
+          campaignId: created.id,
         }),
       })
 

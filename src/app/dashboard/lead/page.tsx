@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import LeadTable from '@/components/LeadTable'
-import { createBrowserClient, type Lead } from '@/lib/supabase'
+import { type Lead } from '@/lib/supabase'
 
 const STATUSES = ['', 'found', 'sent', 'opened', 'replied', 'interested', 'not_interested']
 
@@ -21,28 +21,15 @@ export default function LeadPage() {
   }, [])
 
   async function load() {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    if (!url || !key) {
-      setDebug(
-        `ENV MANCANTI — url: ${url ? 'ok' : 'UNDEFINED'}, anon: ${key ? 'ok' : 'UNDEFINED'}`,
-      )
-      return
-    }
     try {
-      const supabase = createBrowserClient()
-      const { data, error, count } = await supabase
-        .from('leads')
-        .select('*', { count: 'exact' })
-        .order('created_at', { ascending: false })
-      if (error) {
-        setDebug(`Supabase error: ${error.code || ''} — ${error.message}`)
+      const res = await fetch('/api/leads', { cache: 'no-store' })
+      const data = await res.json()
+      if (!res.ok) {
+        setDebug(`Errore: ${data.error || res.status}`)
         return
       }
-      setDebug(
-        `✓ ${data?.length || 0} lead caricati (count ${count ?? '?'}) — url ${url.slice(0, 30)}…`,
-      )
-      setLeads((data as Lead[]) || [])
+      setDebug('')
+      setLeads((data.leads as Lead[]) || [])
     } catch (err) {
       setDebug(`Exception: ${err instanceof Error ? err.message : String(err)}`)
     }
@@ -72,15 +59,15 @@ export default function LeadPage() {
   async function saveLead() {
     if (!selected) return
     try {
-      const supabase = createBrowserClient()
-      await supabase
-        .from('leads')
-        .update({
+      await fetch(`/api/leads/${selected.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           status: editStatus,
           notes: editNotes,
           email: editEmail.trim() || null,
-        })
-        .eq('id', selected.id)
+        }),
+      })
       setSelected(null)
       await load()
     } catch {}

@@ -14,7 +14,7 @@ import {
   YAxis,
 } from 'recharts'
 import StatsCard from '@/components/StatsCard'
-import { createBrowserClient, type Lead } from '@/lib/supabase'
+import { type Lead } from '@/lib/supabase'
 
 const STATUS_COLORS: Record<string, string> = {
   found: '#64748b',
@@ -34,9 +34,9 @@ export default function StatistichePage() {
 
   async function load() {
     try {
-      const supabase = createBrowserClient()
-      const { data } = await supabase.from('leads').select('*')
-      setLeads((data as Lead[]) || [])
+      const res = await fetch('/api/leads', { cache: 'no-store' })
+      const data = await res.json()
+      if (res.ok) setLeads((data.leads as Lead[]) || [])
     } catch {}
   }
 
