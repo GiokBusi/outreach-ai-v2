@@ -3,7 +3,7 @@ import { scrapeGoogleMaps } from '@/lib/scraper'
 import { createAdminClient } from '@/lib/supabase'
 
 export const runtime = 'nodejs'
-export const maxDuration = 600
+export const maxDuration = 300
 
 export async function POST(req: NextRequest) {
   const { categories, city, limit, campaignId } = await req.json()
