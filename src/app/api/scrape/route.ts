@@ -8,7 +8,6 @@ export const maxDuration = 300
 export async function POST(req: NextRequest) {
   const { categories, city, limit, campaignId } = await req.json()
 
-  // Accetta sia un array (multi) sia una singola `category` per retrocompatibilità
   const catList: string[] = Array.isArray(categories)
     ? categories
     : typeof categories === 'string'
@@ -29,70 +28,124 @@ export async function POST(req: NextRequest) {
         controller.enqueue(encoder.encode(JSON.stringify(event) + '\n'))
 
       try {
+        const supabase = createAdminClient()
+
+        // Carica google_maps_url già presenti (tra tutte le campagne) per dedup globale
+        const { data: existing } = await supabase
+          .from('leads')
+          .select('google_maps_url')
+        const existingKeys = new Set<string>(
+          (existing || [])
+            .map((r) => r.google_maps_url)
+            .filter(Boolean)
+            .map((u: string) => {
+              const m = u.match(/\/maps\/place\/([^/@]+)/)
+              return m ? m[1] : u
+            }),
+        )
+
         send({
           type: 'log',
-          message: `Avvio scraping: ${catList.length} categorie a ${city}`,
+          message: `Inizio: ${catList.length} categorie a ${city} · ${existingKeys.size} lead già noti (saranno saltati)`,
         })
 
-        const supabase = createAdminClient()
-        let totalFound = 0
+        let totalSaved = 0
 
         for (const category of catList) {
+          send({ type: 'category-start', category })
           try {
             const leads = await scrapeGoogleMaps(
               category,
               city,
-              Number(limit) || 20,
-              (msg) => send({ type: 'log', message: msg }),
+              Number(limit) || 15,
+              {
+                onLog: (msg) => send({ type: 'log', message: msg }),
+                onLead: (lead) => {
+                  // Dedupe globale contro quelli già nel DB
+                  const m = lead.google_maps_url.match(/\/maps\/place\/([^/@]+)/)
+                  const key = m ? m[1] : lead.google_maps_url
+                  if (existingKeys.has(key)) {
+                    send({
+                      type: 'log',
+                      message: `[${category}] ↷ ${lead.company_name} già nel DB, skip`,
+                    })
+                    return
+                  }
+                  existingKeys.add(key)
+
+                  // Salva subito (fire-and-forget) per non bloccare lo scraper
+                  void supabase
+                    .from('leads')
+                    .insert({
+                      campaign_id: campaignId,
+                      company_name: lead.company_name,
+                      sector: lead.sector,
+                      phone: lead.phone,
+                      google_maps_url: lead.google_maps_url,
+                      address: lead.address,
+                      opening_hours: lead.opening_hours,
+                      business_type: lead.business_type,
+                      website_url: lead.website_url,
+                      rating: lead.rating,
+                      review_count: lead.review_count,
+                      popularity_score: lead.popularity_score,
+                    })
+                    .then(({ error }) => {
+                      if (error) {
+                        send({
+                          type: 'log',
+                          message: `[${category}] Errore DB insert: ${error.message}`,
+                        })
+                      }
+                    })
+
+                  totalSaved++
+
+                  // Invia evento live al client così la UI aggiorna in tempo reale
+                  send({
+                    type: 'lead',
+                    lead: {
+                      company_name: lead.company_name,
+                      sector: lead.sector,
+                      business_type: lead.business_type,
+                      address: lead.address,
+                      phone: lead.phone,
+                      rating: lead.rating,
+                      review_count: lead.review_count,
+                      popularity_score: lead.popularity_score,
+                    },
+                    total: totalSaved,
+                  })
+                },
+              },
             )
 
-            const rows = leads.map((l) => ({
-              campaign_id: campaignId,
-              company_name: l.company_name,
-              sector: l.sector,
-              phone: l.phone,
-              google_maps_url: l.google_maps_url,
-              address: l.address,
-              opening_hours: l.opening_hours,
-              business_type: l.business_type,
-              website_url: l.website_url,
-              rating: l.rating,
-              review_count: l.review_count,
-              popularity_score: l.popularity_score,
-            }))
-
-            if (rows.length > 0) {
-              const { error: insertErr } = await supabase.from('leads').insert(rows)
-              if (insertErr) {
-                send({
-                  type: 'log',
-                  message: `[${category}] Errore insert: ${insertErr.message}`,
-                })
-              }
-            }
-
-            totalFound += leads.length
             send({
               type: 'category-done',
               category,
               found: leads.length,
-              total: totalFound,
+              total: totalSaved,
             })
           } catch (err) {
             const message = err instanceof Error ? err.message : 'Errore sconosciuto'
-            send({ type: 'log', message: `[${category}] Errore: ${message}` })
+            send({ type: 'log', message: `[${category}] ❌ Errore: ${message}` })
           }
         }
 
+        // Aggiorna conteggio campagna
+        const { count } = await supabase
+          .from('leads')
+          .select('*', { count: 'exact', head: true })
+          .eq('campaign_id', campaignId)
         await supabase
           .from('campaigns')
-          .update({ leads_found: totalFound })
+          .update({ leads_found: count || 0 })
           .eq('id', campaignId)
 
-        send({ type: 'done', found: totalFound })
+        send({ type: 'done', found: totalSaved })
         controller.close()
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Errore sconosciuto'
+        const message = err instanceof Error ? err.message : 'Errore'
         send({ type: 'error', message })
         controller.close()
       }

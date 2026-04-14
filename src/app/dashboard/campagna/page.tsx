@@ -4,6 +4,17 @@ import { useEffect, useState } from 'react'
 import { type Campaign } from '@/lib/supabase'
 import { CATEGORY_GROUPS } from '@/lib/categories'
 
+type LiveLead = {
+  company_name: string
+  sector: string
+  business_type: string | null
+  address: string | null
+  phone: string | null
+  rating: number | null
+  review_count: number | null
+  popularity_score: number | null
+}
+
 export default function CampagnaPage() {
   const [name, setName] = useState('')
   const [selectedCats, setSelectedCats] = useState<string[]>([])
@@ -15,6 +26,8 @@ export default function CampagnaPage() {
   const [running, setRunning] = useState(false)
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [currentCampaign, setCurrentCampaign] = useState<Campaign | null>(null)
+  const [liveLeads, setLiveLeads] = useState<LiveLead[]>([])
+  const [currentCategory, setCurrentCategory] = useState<string>('')
 
   useEffect(() => {
     void loadCampaigns()
@@ -62,6 +75,8 @@ export default function CampagnaPage() {
 
     setRunning(true)
     setLogs([])
+    setLiveLeads([])
+    setCurrentCategory('')
     try {
       const createRes = await fetch('/api/campaigns', {
         method: 'POST',
@@ -107,11 +122,23 @@ export default function CampagnaPage() {
           if (!line.trim()) continue
           try {
             const evt = JSON.parse(line)
-            if (evt.type === 'log') appendLog(evt.message)
-            else if (evt.type === 'category-done')
-              appendLog(`✅ [${evt.category}] ${evt.found} lead — totale ${evt.total}`)
-            else if (evt.type === 'done') appendLog(`🏁 Completato: ${evt.found} lead totali`)
-            else if (evt.type === 'error') appendLog(`❌ ${evt.message}`)
+            if (evt.type === 'log') {
+              appendLog(evt.message)
+            } else if (evt.type === 'category-start') {
+              setCurrentCategory(evt.category)
+              appendLog(`▶ Categoria: ${evt.category}`)
+            } else if (evt.type === 'lead') {
+              setLiveLeads((cur) => [evt.lead, ...cur])
+            } else if (evt.type === 'category-done') {
+              appendLog(
+                `✅ [${evt.category}] ${evt.found} lead — totale ${evt.total}`,
+              )
+            } else if (evt.type === 'done') {
+              setCurrentCategory('')
+              appendLog(`🏁 Completato: ${evt.found} lead totali`)
+            } else if (evt.type === 'error') {
+              appendLog(`❌ ${evt.message}`)
+            }
           } catch {
             appendLog(line)
           }
@@ -304,12 +331,86 @@ export default function CampagnaPage() {
         </div>
       </form>
 
-      {logs.length > 0 && (
-        <div className="bg-black border border-slate-800 rounded-2xl p-4 font-mono text-xs text-emerald-300 max-h-80 overflow-auto">
-          {logs.map((l, i) => (
-            <div key={i}>{l}</div>
-          ))}
+      {(running || liveLeads.length > 0) && (
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+            <div>
+              <h2 className="font-semibold text-slate-100">
+                Ricerca in corso
+                {currentCategory && (
+                  <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-indigo-600/30 border border-indigo-500/40 text-indigo-200">
+                    {currentCategory}
+                  </span>
+                )}
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {liveLeads.length} lead trovati
+              </p>
+            </div>
+            {running && (
+              <div className="flex items-center gap-2 text-xs text-emerald-400">
+                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                scansione in corso
+              </div>
+            )}
+          </div>
+
+          {liveLeads.length > 0 && (
+            <div className="max-h-96 overflow-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-950/50 text-slate-400 text-[10px] uppercase tracking-wide sticky top-0">
+                  <tr>
+                    <th className="text-left px-4 py-2">Attività</th>
+                    <th className="text-left px-4 py-2">Indirizzo</th>
+                    <th className="text-left px-4 py-2">Telefono</th>
+                    <th className="text-left px-4 py-2 w-20">Score</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800">
+                  {liveLeads.map((l, i) => (
+                    <tr key={`${l.company_name}-${i}`} className="animate-fade-in">
+                      <td className="px-4 py-2.5">
+                        <div className="font-medium text-slate-100">
+                          {l.company_name}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          {l.business_type || l.sector}
+                          {l.rating != null && (
+                            <>
+                              {' · '}★ {l.rating.toFixed(1)} ({l.review_count})
+                            </>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-2.5 text-slate-400 text-xs max-w-xs truncate">
+                        {l.address || '—'}
+                      </td>
+                      <td className="px-4 py-2.5 text-slate-400 text-xs">
+                        {l.phone || '—'}
+                      </td>
+                      <td className="px-4 py-2.5 text-slate-300 font-mono text-xs">
+                        {l.popularity_score ?? '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
+      )}
+
+      {logs.length > 0 && (
+        <details className="bg-black border border-slate-800 rounded-2xl">
+          <summary className="cursor-pointer px-5 py-3 text-xs text-slate-400 select-none">
+            Log tecnico ({logs.length} righe)
+          </summary>
+          <div className="p-4 pt-0 font-mono text-xs text-emerald-300 max-h-80 overflow-auto">
+            {logs.map((l, i) => (
+              <div key={i}>{l}</div>
+            ))}
+          </div>
+        </details>
       )}
 
       <div>

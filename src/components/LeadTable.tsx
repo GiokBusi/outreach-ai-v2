@@ -26,7 +26,6 @@ function tempOf(score: number | null): {
   pct: number
 } {
   if (score == null) return { label: '—', color: 'bg-slate-700', pct: 0 }
-  // Scale: score 100 → 100% (capped)
   const pct = Math.min(100, Math.round((score / 100) * 100))
   if (score >= 60) return { label: 'Hot', color: 'bg-rose-500', pct }
   if (score >= 25) return { label: 'Warm', color: 'bg-amber-500', pct }
@@ -40,7 +39,6 @@ export default function LeadTable({
   leads: Lead[]
   onSelect?: (l: Lead) => void
 }) {
-  // Ordina per popularity_score desc (null in fondo)
   const sorted = [...leads].sort((a, b) => {
     const sa = a.popularity_score ?? -1
     const sb = b.popularity_score ?? -1
@@ -58,13 +56,13 @@ export default function LeadTable({
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
       <table className="w-full text-sm">
-        <thead className="bg-slate-950/50 text-slate-400 text-xs uppercase tracking-wide">
+        <thead className="bg-slate-950/50 text-slate-400 text-[10px] uppercase tracking-wide">
           <tr>
-            <th className="text-left px-4 py-3">Azienda</th>
-            <th className="text-left px-4 py-3">Settore</th>
-            <th className="text-left px-4 py-3 w-56">Popolarità</th>
-            <th className="text-left px-4 py-3">Telefono / Email</th>
-            <th className="text-left px-4 py-3">Stato</th>
+            <th className="text-left px-4 py-3">Attività</th>
+            <th className="text-left px-4 py-3 w-48">Popolarità</th>
+            <th className="text-left px-4 py-3">Indirizzo</th>
+            <th className="text-left px-4 py-3">Contatti</th>
+            <th className="text-left px-4 py-3 w-32">Stato</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-800">
@@ -78,34 +76,45 @@ export default function LeadTable({
               >
                 <td className="px-4 py-3">
                   <div className="font-medium text-slate-100">{l.company_name}</div>
-                  {l.rating != null && l.review_count != null && (
-                    <div className="text-xs text-slate-500 mt-0.5">
-                      ★ {l.rating.toFixed(1)} · {l.review_count} recensioni
-                    </div>
-                  )}
+                  <div className="text-xs text-slate-500 mt-0.5">
+                    {l.business_type || l.sector}
+                    {l.rating != null && l.review_count != null && (
+                      <>
+                        {' · '}★ {l.rating.toFixed(1)} · {l.review_count} rec.
+                      </>
+                    )}
+                  </div>
                 </td>
-                <td className="px-4 py-3 text-slate-400">{l.sector || '—'}</td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <span
-                      className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wide text-white ${t.color}`}
+                      className={`inline-block px-1.5 py-0.5 rounded-md text-[9px] font-semibold uppercase tracking-wide text-white ${t.color}`}
                     >
                       {t.label}
                     </span>
-                    <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
+                    <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
                       <div
                         className={`${t.color} h-full transition-all`}
                         style={{ width: `${t.pct}%` }}
                       />
                     </div>
-                    <span className="text-xs text-slate-500 w-10 text-right">
+                    <span className="text-[10px] text-slate-500 font-mono w-8 text-right">
                       {l.popularity_score ?? '—'}
                     </span>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-slate-400">
-                  <div>{l.phone || '—'}</div>
-                  <div className="text-xs text-slate-500">{l.email || ''}</div>
+                <td className="px-4 py-3 text-xs text-slate-400 max-w-xs">
+                  <div className="truncate">{l.address || '—'}</div>
+                  {l.opening_hours && (
+                    <div className="truncate text-slate-600 mt-0.5">
+                      {l.opening_hours}
+                    </div>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-xs text-slate-400">
+                  {l.phone && <div>📞 {l.phone}</div>}
+                  {l.email && <div>✉ {l.email}</div>}
+                  {!l.phone && !l.email && '—'}
                 </td>
                 <td className="px-4 py-3">
                   <span
