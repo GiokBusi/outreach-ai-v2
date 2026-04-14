@@ -8,6 +8,7 @@ const STATUSES = ['', 'found', 'sent', 'opened', 'replied', 'interested', 'not_i
 
 export default function LeadPage() {
   const [leads, setLeads] = useState<Lead[]>([])
+  const [debug, setDebug] = useState<string>('')
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [selected, setSelected] = useState<Lead | null>(null)
@@ -20,14 +21,31 @@ export default function LeadPage() {
   }, [])
 
   async function load() {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    if (!url || !key) {
+      setDebug(
+        `ENV MANCANTI — url: ${url ? 'ok' : 'UNDEFINED'}, anon: ${key ? 'ok' : 'UNDEFINED'}`,
+      )
+      return
+    }
     try {
       const supabase = createBrowserClient()
-      const { data } = await supabase
+      const { data, error, count } = await supabase
         .from('leads')
-        .select('*')
+        .select('*', { count: 'exact' })
         .order('created_at', { ascending: false })
+      if (error) {
+        setDebug(`Supabase error: ${error.code || ''} — ${error.message}`)
+        return
+      }
+      setDebug(
+        `✓ ${data?.length || 0} lead caricati (count ${count ?? '?'}) — url ${url.slice(0, 30)}…`,
+      )
       setLeads((data as Lead[]) || [])
-    } catch {}
+    } catch (err) {
+      setDebug(`Exception: ${err instanceof Error ? err.message : String(err)}`)
+    }
   }
 
   const filtered = useMemo(() => {
@@ -73,6 +91,11 @@ export default function LeadPage() {
       <div>
         <h1 className="text-2xl font-bold">Lead CRM</h1>
         <p className="text-sm text-slate-400 mt-1">{filtered.length} lead</p>
+        {debug && (
+          <div className="mt-3 p-3 bg-amber-900/30 border border-amber-700/50 rounded-lg text-xs text-amber-200 font-mono">
+            DEBUG: {debug}
+          </div>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-3">
