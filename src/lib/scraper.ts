@@ -20,11 +20,6 @@ function computeScore(rating: number | null, reviews: number | null): number | n
   return Math.round(rating * Math.sqrt(reviews))
 }
 
-/**
- * Estrae il nome del place dall'URL Google Maps.
- * Es: https://www.google.com/maps/place/La+locanda+del+Tempio/@...
- *     → "La locanda del Tempio"
- */
 function nameFromUrl(url: string): string | null {
   const m = url.match(/\/maps\/place\/([^/@]+)/)
   if (!m) return null
@@ -32,10 +27,6 @@ function nameFromUrl(url: string): string | null {
   return raw || null
 }
 
-/**
- * Deriva una chiave stabile dall'URL del place per la deduplica.
- * Rimuove il suffisso /@coordinate/... lasciando solo la parte /place/<name>.
- */
 function placeKey(url: string): string {
   const m = url.match(/\/maps\/place\/([^/@]+)/)
   return m ? m[1] : url
@@ -75,8 +66,8 @@ export async function scrapeGoogleMaps(
     })
     await page.waitForTimeout(2500)
 
-    // Consent
-    for (const label of ['Accetta tutto', 'Accetta tutti', 'Accept all']) {
+    // Consenso cookie (Italiano + Inglese)
+    for (const label of ['Accetta tutto', 'Accetta tutti', 'Accept all', 'Rifiuta tutto', 'Reject all']) {
       const btn = page.locator(`button:has-text("${label}")`).first()
       if (await btn.isVisible().catch(() => false)) {
         await btn.click().catch(() => {})
@@ -85,115 +76,187 @@ export async function scrapeGoogleMaps(
       }
     }
 
+    // Attendi che la sidebar con i risultati compaia
+    await page
+      .locator('[role="feed"]')
+      .first()
+      .waitFor({ timeout: 8000 })
+      .catch(() => {})
+
     const results: ScrapedLead[] = []
     const seenKeys = new Set<string>()
     const sidebar = page.locator('[role="feed"]').first()
 
-    log(`[${category}] Carico elenco risultati…`)
-    for (let i = 0; i < 15; i++) {
+    log(`[${category}] Scorro la lista…`)
+    for (let i = 0; i < 12; i++) {
       await sidebar.evaluate((el) => (el.scrollTop = el.scrollHeight)).catch(() => {})
-      await page.waitForTimeout(800)
+      await page.waitForTimeout(700)
     }
 
     const listings = await page.locator('[role="feed"] a[href*="/maps/place/"]').all()
-    log(`[${category}] ${listings.length} listing in lista, apro uno per uno…`)
+    log(`[${category}] ${listings.length} risultati, apro uno per uno…`)
 
-    const maxTries = Math.min(listings.length, Math.max(limit * 8, 60))
+    if (listings.length === 0) {
+      log(`[${category}] ⚠️ Nessun risultato — Google Maps potrebbe avere cambiato layout o bloccato la ricerca`)
+      return []
+    }
+
+    const maxTries = Math.min(listings.length, Math.max(limit * 6, 40))
 
     for (let idx = 0; idx < maxTries; idx++) {
       const listing = listings[idx]
       try {
-        // Leggi l'href del listing PRIMA del click per avere l'URL canonico del place
         const href = await listing.getAttribute('href').catch(() => null)
         const key = href ? placeKey(href) : null
         if (key && seenKeys.has(key)) continue
 
-        await listing.click()
-        // Aspetta che l'URL cambi al pattern /maps/place/
+        await listing.click({ timeout: 3000 })
+        await page.waitForURL(/\/maps\/place\//, { timeout: 5000 }).catch(() => {})
+        // Aspetta che l'h1 del pannello detail sia pronto
         await page
-          .waitForURL(/\/maps\/place\//, { timeout: 4000 })
+          .locator('[role="main"] h1')
+          .first()
+          .waitFor({ timeout: 3000 })
           .catch(() => {})
-        await page.waitForTimeout(1100)
+        await page.waitForTimeout(600)
 
         const currentUrl = page.url()
+        if (!currentUrl.includes('/maps/place/')) {
+          continue
+        }
         const currentKey = placeKey(currentUrl)
         if (seenKeys.has(currentKey)) continue
+        seenKeys.add(currentKey)
 
-        // Nome affidabile: dall'URL. Fallback: h1 dentro role=main.
         let name = nameFromUrl(currentUrl)
         if (!name) {
-          name = await page
+          const h1Text = await page
             .locator('[role="main"] h1')
             .first()
             .textContent({ timeout: 800 })
             .catch(() => null)
-          name = name?.trim() || null
+          name = h1Text?.trim() || null
         }
-        // Scarta nomi generici che sono header del pannello ricerca
         if (!name || /^(Risultati|Results)$/i.test(name)) continue
 
-        // Estrai il resto dei dati dal pannello detail
+        // Estrai tutti i dati dal pannello detail con selettori robusti
         const data = await page.evaluate(() => {
           const main = document.querySelector('[role="main"]') as HTMLElement | null
           const scope: HTMLElement | Document = main || document
 
-          const pickText = (sel: string): string | null => {
-            const el = scope.querySelector(sel) as HTMLElement | null
-            return el?.innerText?.trim() || null
+          // --- Rating ---
+          // Cerca aria-label con "X,Y stelle" o "X.Y stars"
+          let rating: number | null = null
+          const ratingLabels = Array.from(scope.querySelectorAll('[aria-label]'))
+          for (const el of ratingLabels) {
+            const lbl = el.getAttribute('aria-label') || ''
+            const m = lbl.match(/^\s*(\d[,.]\d)\s*stell/i) ||
+              lbl.match(/^\s*(\d[,.]\d)\s*star/i)
+            if (m) {
+              rating = parseFloat(m[1].replace(',', '.'))
+              break
+            }
           }
 
+          // --- Review count ---
+          let reviewCount: number | null = null
+          for (const el of ratingLabels) {
+            const lbl = el.getAttribute('aria-label') || ''
+            const m = lbl.match(/(\d[\d.,]*)\s*recensioni/i) ||
+              lbl.match(/(\d[\d.,]*)\s*reviews/i)
+            if (m) {
+              reviewCount = parseInt(m[1].replace(/[.,\s]/g, ''), 10)
+              if (isNaN(reviewCount)) reviewCount = null
+              if (reviewCount != null) break
+            }
+          }
+
+          // --- Phone (molti possibili selettori) ---
+          let phone: string | null = null
+          const phoneSelectors = [
+            'button[data-item-id^="phone:tel:"]',
+            'button[data-item-id^="phone"]',
+            '[data-item-id^="phone:tel:"]',
+            '[data-item-id^="phone"]',
+            '[aria-label*="Telefono"]',
+            '[aria-label*="telefono"]',
+            'a[href^="tel:"]',
+          ]
+          for (const sel of phoneSelectors) {
+            const el = scope.querySelector(sel) as HTMLElement | null
+            if (!el) continue
+            // Prova prima aria-label, poi testo
+            const lbl = el.getAttribute('aria-label') || ''
+            const text = el.innerText || ''
+            // Cerca pattern numero italiano / internazionale
+            const m = (lbl + ' ' + text).match(/(\+?\d[\d\s\-.()]{7,}\d)/)
+            if (m) {
+              phone = m[1].trim()
+              break
+            }
+          }
+          // Fallback: primo href tel: trovato
+          if (!phone) {
+            const telLink = scope.querySelector('a[href^="tel:"]') as HTMLAnchorElement | null
+            if (telLink) phone = telLink.href.replace(/^tel:/, '').trim()
+          }
+
+          // --- Address ---
+          let address: string | null = null
+          const addrSelectors = [
+            'button[data-item-id="address"]',
+            '[data-item-id="address"]',
+            '[aria-label*="Indirizzo"]',
+          ]
+          for (const sel of addrSelectors) {
+            const el = scope.querySelector(sel) as HTMLElement | null
+            if (!el) continue
+            const lbl = el.getAttribute('aria-label') || ''
+            const text = el.innerText || ''
+            // L'aria-label tipico è "Indirizzo: Via Roma 1, Milano"
+            const clean = lbl.replace(/^Indirizzo:\s*/i, '').trim() || text.trim()
+            if (clean) {
+              address = clean
+              break
+            }
+          }
+
+          // --- Website ---
           const websiteEl = scope.querySelector(
-            'a[data-item-id="authority"]',
+            'a[data-item-id="authority"], a[data-tooltip="Apri sito"], a[aria-label*="sito web"], a[aria-label*="sito Web"]',
           ) as HTMLAnchorElement | null
           const websiteUrl = websiteEl?.href || null
 
-          const phone = pickText('[data-item-id^="phone"]')
-          const address = pickText('[data-item-id="address"]')
-
-          // Tipo attività (subcategoria Google)
+          // --- Business type (sottocategoria) ---
           let businessType: string | null = null
           const typeBtn = scope.querySelector(
             'button[jsaction*="category"]',
           ) as HTMLElement | null
-          if (typeBtn) businessType = typeBtn.innerText.trim()
+          if (typeBtn) businessType = typeBtn.innerText.trim() || null
 
-          // Orari
+          // --- Orari ---
+          let openingHours: string | null = null
           const hoursEl = scope.querySelector(
-            '[data-item-id*="oh"]',
+            '[data-item-id*="oh"], [aria-label*="Orari"]',
           ) as HTMLElement | null
-          const opening = hoursEl?.innerText?.trim().replace(/\s+/g, ' ') || null
-
-          // Rating e recensioni — cerca SOLO dentro il pannello detail
-          let rating: number | null = null
-          let reviewCount: number | null = null
-          // Span con aria-label "X,Y stelle" o pattern "4,3(128)"
-          const panelText = (main?.innerText || '').slice(0, 2000)
-          const m = panelText.match(/(\d[,.]\d)\s*\((\d+[.,]?\d*)\)/)
-          if (m) {
-            rating = parseFloat(m[1].replace(',', '.'))
-            reviewCount = parseInt(m[2].replace(/[.,]/g, ''), 10)
-            if (isNaN(rating)) rating = null
-            if (isNaN(reviewCount)) reviewCount = null
+          if (hoursEl) {
+            const lbl = hoursEl.getAttribute('aria-label') || ''
+            openingHours = (lbl || hoursEl.innerText || '').replace(/\s+/g, ' ').trim() || null
           }
 
           return {
-            websiteUrl,
+            rating,
+            reviewCount,
             phone,
             address,
             businessType,
-            opening,
-            rating,
-            reviewCount,
+            openingHours,
+            websiteUrl,
           }
         })
 
-        // Filtro: skip se ha un sito (a meno che l'utente non voglia includerli)
-        if (!includeWithWebsite && data.websiteUrl) {
-          seenKeys.add(currentKey)
-          continue
-        }
-
-        seenKeys.add(currentKey)
+        // Filtro sito web
+        if (!includeWithWebsite && data.websiteUrl) continue
 
         const lead: ScrapedLead = {
           company_name: name,
@@ -202,7 +265,7 @@ export async function scrapeGoogleMaps(
           google_maps_url: currentUrl,
           sector: category,
           business_type: data.businessType,
-          opening_hours: data.opening,
+          opening_hours: data.openingHours,
           website_url: data.websiteUrl,
           rating: data.rating,
           review_count: data.reviewCount,
@@ -215,16 +278,18 @@ export async function scrapeGoogleMaps(
             lead.rating != null
               ? ` — ★${lead.rating.toFixed(1)} · ${lead.review_count} rec · score ${lead.popularity_score}`
               : ''
-          }`,
+          }${lead.phone ? ` · ${lead.phone}` : ''}`,
         )
 
         if (results.length >= limit) break
-      } catch {
-        // ignora fallimenti singoli
+      } catch (err) {
+        // Singolo listing fallito — continua col prossimo
+        const msg = err instanceof Error ? err.message.slice(0, 60) : 'errore'
+        log(`[${category}] listing #${idx} skip (${msg})`)
       }
     }
 
-    log(`[${category}] Categoria completata: ${results.length} lead senza sito`)
+    log(`[${category}] ✅ Completata: ${results.length} lead senza sito`)
     return results
   } finally {
     await browser.close()

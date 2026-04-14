@@ -28,31 +28,36 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex-1 flex items-center justify-center bg-slate-950 text-slate-100 p-6">
+    <main className="flex-1 flex items-center justify-center p-6">
       <form
         onSubmit={onSubmit}
-        className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-xl"
+        className="w-full max-w-sm card p-8 shadow-2xl shadow-indigo-900/20"
       >
-        <h1 className="text-2xl font-bold mb-1">OutreachAI</h1>
-        <p className="text-sm text-slate-400 mb-6">Accedi alla dashboard</p>
+        <div className="flex items-center gap-3 mb-6">
+          <div className="h-11 w-11 rounded-2xl bg-gradient-to-br from-indigo-500 to-pink-500 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-indigo-500/30">
+            O
+          </div>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight">OutreachAI</h1>
+            <p className="text-xs text-slate-500">Accedi alla dashboard</p>
+          </div>
+        </div>
 
-        <label className="block text-sm font-medium mb-2">Password</label>
+        <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">
+          Password
+        </label>
         <input
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="input w-full"
           autoFocus
           required
         />
 
-        {error && <p className="text-red-400 text-sm mt-3">{error}</p>}
+        {error && <p className="text-rose-400 text-sm mt-3">{error}</p>}
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="mt-6 w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium py-2 rounded-lg transition"
-        >
+        <button type="submit" disabled={loading} className="mt-6 w-full btn-primary">
           {loading ? 'Accesso…' : 'Entra'}
         </button>
       </form>

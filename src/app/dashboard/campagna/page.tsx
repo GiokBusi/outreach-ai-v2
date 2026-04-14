@@ -196,18 +196,15 @@ export default function CampagnaPage() {
   const totalSelected = selectedCats.length
 
   return (
-    <div className="p-8 space-y-8">
+    <div className="p-8 space-y-8 max-w-[1400px] mx-auto">
       <div>
-        <h1 className="text-2xl font-bold">Nuova campagna</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Nuova campagna</h1>
         <p className="text-sm text-slate-400 mt-1">
-          Scraping multi-categoria da Google Maps · solo aziende senza sito
+          Scraping multi-categoria da Google Maps · solo attività senza sito web
         </p>
       </div>
 
-      <form
-        onSubmit={startScraping}
-        className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6"
-      >
+      <form onSubmit={startScraping} className="card p-7 space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Field label="Nome campagna">
             <input
@@ -247,14 +244,14 @@ export default function CampagnaPage() {
               <button
                 type="button"
                 onClick={selectAll}
-                className="text-xs px-2 py-1 rounded-md bg-slate-800 hover:bg-slate-700"
+                className="text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 transition"
               >
                 Seleziona tutto
               </button>
               <button
                 type="button"
                 onClick={clearAll}
-                className="text-xs px-2 py-1 rounded-md bg-slate-800 hover:bg-slate-700"
+                className="text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 transition"
               >
                 Svuota
               </button>
@@ -273,10 +270,10 @@ export default function CampagnaPage() {
                         type="button"
                         key={cat}
                         onClick={() => toggleCategory(cat)}
-                        className={`text-sm px-3 py-1.5 rounded-full border transition ${
+                        className={`text-sm px-3.5 py-1.5 rounded-full border transition ${
                           on
-                            ? 'bg-indigo-600 border-indigo-500 text-white'
-                            : 'bg-slate-950 border-slate-700 text-slate-300 hover:border-slate-500'
+                            ? 'bg-indigo-600 border-indigo-500 text-white shadow-md shadow-indigo-600/30'
+                            : 'bg-slate-900/60 border-slate-700 text-slate-300 hover:border-indigo-500/60 hover:bg-slate-800/60'
                         }`}
                       >
                         {cat}
@@ -313,20 +310,16 @@ export default function CampagnaPage() {
         </Field>
 
         <div className="flex gap-3 pt-2">
-          <button
-            type="submit"
-            disabled={running}
-            className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 px-4 py-2 rounded-lg text-sm font-medium"
-          >
+          <button type="submit" disabled={running} className="btn-primary">
             {running ? 'In corso…' : '🚀 Avvia scraping'}
           </button>
           <button
             type="button"
             onClick={sendEmails}
             disabled={running || !currentCampaign}
-            className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 px-4 py-2 rounded-lg text-sm font-medium"
+            className="btn-success"
           >
-            ✉️ Invia email
+            ✉ Invia email
           </button>
         </div>
       </form>
@@ -414,8 +407,8 @@ export default function CampagnaPage() {
       )}
 
       <div>
-        <h2 className="text-lg font-semibold mb-3">Campagne</h2>
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+        <h2 className="text-lg font-semibold tracking-tight mb-3">Campagne</h2>
+        <div className="card overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-slate-950/50 text-slate-400 text-xs uppercase tracking-wide">
               <tr>
