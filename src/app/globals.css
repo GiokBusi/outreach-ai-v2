@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #020617;
-  --foreground: #f1f5f9;
+  --background: #05060a;
+  --foreground: #e7e9f0;
 }
 
 @theme inline {
@@ -23,41 +23,40 @@ body {
 
 body {
   background-image:
-    radial-gradient(at 20% 0%, rgba(99, 102, 241, 0.12) 0, transparent 45%),
-    radial-gradient(at 80% 20%, rgba(236, 72, 153, 0.08) 0, transparent 45%),
-    radial-gradient(at 0% 100%, rgba(16, 185, 129, 0.06) 0, transparent 50%);
+    radial-gradient(at 15% -10%, rgba(79, 70, 229, 0.08) 0, transparent 50%),
+    radial-gradient(at 90% 10%, rgba(168, 85, 247, 0.05) 0, transparent 45%),
+    radial-gradient(at 50% 100%, rgba(16, 185, 129, 0.03) 0, transparent 55%);
   background-attachment: fixed;
 }
 
 @layer components {
   .input {
-    @apply bg-slate-900/80 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100
-           placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/60
-           focus:border-indigo-500/60 transition;
+    @apply bg-[#0c0d15] border border-[#1c1e2c] rounded-xl px-3.5 py-2.5 text-sm text-slate-100
+           placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50
+           focus:border-indigo-500/40 transition;
   }
 
   .card {
-    @apply bg-slate-900/60 backdrop-blur-sm border border-slate-800/80 rounded-2xl;
+    @apply bg-[#0a0b12]/80 backdrop-blur-sm border border-[#15172248] rounded-2xl;
   }
 
   .btn-primary {
-    @apply bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 disabled:opacity-50
+    @apply bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 disabled:opacity-40
            disabled:cursor-not-allowed text-white font-medium px-4 py-2.5 rounded-xl text-sm
-           transition shadow-lg shadow-indigo-600/20;
+           transition shadow-lg shadow-indigo-900/50;
   }
 
   .btn-secondary {
-    @apply bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium px-4 py-2.5
-           rounded-xl text-sm transition;
+    @apply bg-[#12131c] hover:bg-[#1a1c28] border border-[#1e202d] text-slate-200 font-medium
+           px-4 py-2.5 rounded-xl text-sm transition;
   }
 
   .btn-success {
-    @apply bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-medium
-           px-4 py-2.5 rounded-xl text-sm transition shadow-lg shadow-emerald-600/20;
+    @apply bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-medium
+           px-4 py-2.5 rounded-xl text-sm transition shadow-lg shadow-emerald-900/50;
   }
 }
 
-/* Scrollbar dark style */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -66,11 +65,37 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.15);
+  background: rgba(99, 102, 241, 0.15);
   border-radius: 6px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.3);
+  background: rgba(99, 102, 241, 0.3);
+}
+
+/* Sovrascrive i toni slate-* con la nuova palette darker */
+.bg-slate-900,
+.bg-slate-900\/50,
+.bg-slate-900\/60,
+.bg-slate-900\/80 {
+  background-color: #0a0b12 !important;
+}
+.bg-slate-950,
+.bg-slate-950\/40,
+.bg-slate-950\/50 {
+  background-color: #05060a !important;
+}
+.bg-slate-800,
+.bg-slate-800\/40,
+.bg-slate-800\/60 {
+  background-color: #12131c !important;
+}
+.border-slate-800,
+.border-slate-800\/60,
+.border-slate-800\/80 {
+  border-color: #15172e !important;
+}
+.border-slate-700 {
+  border-color: #1c1e2c !important;
 }
 
 @keyframes fade-in {
@@ -86,16 +111,4 @@ body {
 
 .animate-fade-in {
   animation: fade-in 0.4s ease-out;
-}
-
-@keyframes pulse-dot {
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.6;
-    transform: scale(1.2);
-  }
 }
