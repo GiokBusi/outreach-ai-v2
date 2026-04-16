@@ -16,6 +16,7 @@ export async function PATCH(
     if ('email' in body) update.email = body.email || null
     if ('whatsapp' in body) update.whatsapp = body.whatsapp || null
     if ('archived' in body) update.archived = !!body.archived
+    if ('email_replied_at' in body) update.email_replied_at = body.email_replied_at
 
     const supabase = createAdminClient()
     const { error } = await supabase.from('leads').update(update).eq('id', id)

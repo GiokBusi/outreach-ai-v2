@@ -6,56 +6,56 @@ export const dynamic = 'force-dynamic'
 
 export default async function OverviewPage() {
   let leadsFound = 0
+  let withPhone = 0
+  let withEmail = 0
   let emailsSent = 0
   let opened = 0
+  let replied = 0
   let interested = 0
   let recent: Awaited<ReturnType<typeof fetchRecent>> = []
 
   try {
     const supabase = createAdminClient()
-    const [foundRes, sentRes, openedRes, intRes] = await Promise.all([
+    const [foundRes, phoneRes, emailRes, sentRes, openedRes, repliedRes, intRes] = await Promise.all([
       supabase.from('leads').select('*', { count: 'exact', head: true }),
-      supabase.from('leads').select('*', { count: 'exact', head: true }).eq('status', 'sent'),
-      supabase.from('leads').select('*', { count: 'exact', head: true }).eq('status', 'opened'),
-      supabase
-        .from('leads')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'interested'),
+      supabase.from('leads').select('*', { count: 'exact', head: true }).not('phone', 'is', null),
+      supabase.from('leads').select('*', { count: 'exact', head: true }).not('email', 'is', null),
+      supabase.from('leads').select('*', { count: 'exact', head: true }).not('email_sent_at', 'is', null),
+      supabase.from('leads').select('*', { count: 'exact', head: true }).not('email_opened_at', 'is', null),
+      supabase.from('leads').select('*', { count: 'exact', head: true }).eq('status', 'replied'),
+      supabase.from('leads').select('*', { count: 'exact', head: true }).eq('status', 'interested'),
     ])
     leadsFound = foundRes.count || 0
+    withPhone = phoneRes.count || 0
+    withEmail = emailRes.count || 0
     emailsSent = sentRes.count || 0
     opened = openedRes.count || 0
+    replied = repliedRes.count || 0
     interested = intRes.count || 0
     recent = await fetchRecent()
-  } catch {
-    // env not configured yet
-  }
+  } catch {}
 
   const openRate = emailsSent > 0 ? Math.round((opened / emailsSent) * 100) : 0
+  const replyRate = emailsSent > 0 ? Math.round((replied / emailsSent) * 100) : 0
 
   return (
-    <div className="p-8 space-y-8 max-w-[1400px] mx-auto">
+    <div className="p-4 md:p-6 lg:p-8 space-y-6 max-w-[1400px] mx-auto">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Panoramica</h1>
-        <p className="text-sm text-slate-400 mt-1">
-          Stato generale delle campagne e ultimi lead trovati
+        <h1 className="text-xl md:text-2xl font-bold tracking-tight">Panoramica</h1>
+        <p className="text-xs text-slate-500 mt-1">
+          Dashboard generale
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatsCard label="Lead trovati" value={leadsFound} accent="indigo" />
-        <StatsCard label="Mail inviate" value={emailsSent} accent="emerald" />
-        <StatsCard
-          label="Open rate"
-          value={`${openRate}%`}
-          hint={`${opened} aperture`}
-          accent="amber"
-        />
-        <StatsCard label="Interessati" value={interested} accent="rose" />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatsCard label="Lead trovati" value={leadsFound} hint={`${withPhone} con tel · ${withEmail} con email`} />
+        <StatsCard label="Email inviate" value={emailsSent} />
+        <StatsCard label="Open rate" value={`${openRate}%`} hint={`${opened} aperture`} />
+        <StatsCard label="Reply rate" value={`${replyRate}%`} hint={`${replied} risposte · ${interested} interessati`} />
       </div>
 
       <div>
-        <h2 className="text-lg font-semibold tracking-tight mb-3">Ultimi 10 lead</h2>
+        <h2 className="text-sm font-semibold text-slate-400 mb-3">Ultimi lead</h2>
         <LeadTable leads={recent} />
       </div>
     </div>

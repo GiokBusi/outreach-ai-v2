@@ -144,6 +144,19 @@ export default function LeadPage() {
     }
   }
 
+  async function quickStatus(id: string, status: string) {
+    try {
+      const update: Record<string, unknown> = { status }
+      if (status === 'replied') update.email_replied_at = new Date().toISOString()
+      await fetch(`/api/leads/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(update),
+      })
+      await load()
+    } catch {}
+  }
+
   async function sendEmailToLeads(ids: string[]) {
     const leadsToSend = leads.filter((l) => ids.includes(l.id))
     const withEmail = leadsToSend.filter((l) => l.email)
@@ -192,25 +205,28 @@ export default function LeadPage() {
   }
 
   return (
-    <div className="p-6 lg:p-8 space-y-6 max-w-[1500px] mx-auto">
+    <div className="p-4 md:p-6 lg:p-8 space-y-4 md:space-y-6 max-w-[1500px] mx-auto">
       {/* Header */}
-      <div className="flex items-end justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-100">Lead</h1>
-          <p className="text-sm text-slate-500 mt-0.5">
-            {stats.total} totali · {stats.withPhone} con telefono · {stats.withEmail} con email · {stats.contacted} contattati
-          </p>
+          <h1 className="text-xl md:text-2xl font-bold tracking-tight text-slate-100">Lead</h1>
+          <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate-500 mt-0.5">
+            <span>{stats.total} totali</span>
+            <span>{stats.withPhone} con tel</span>
+            <span>{stats.withEmail} con email</span>
+            <span>{stats.contacted} contattati</span>
+          </div>
         </div>
         <button
           type="button"
           onClick={() => setShowArchived((v) => !v)}
-          className={`px-3 py-2 rounded-lg text-xs font-medium transition border ${
+          className={`px-3 py-2 rounded-lg text-xs font-medium transition border self-start ${
             showArchived
               ? 'bg-rose-500/10 border-rose-500/30 text-rose-400'
               : 'bg-transparent border-[#1a1c2e] text-slate-500 hover:text-slate-300 hover:border-slate-600'
           }`}
         >
-          {showArchived ? 'Mostra solo attivi' : 'Includi scartati'}
+          {showArchived ? 'Solo attivi' : 'Includi scartati'}
         </button>
       </div>
 
@@ -221,24 +237,24 @@ export default function LeadPage() {
       )}
 
       {/* Filtri */}
-      <div className="flex flex-wrap gap-2 items-center">
-        <div className="relative flex-1 min-w-[280px]">
+      <div className="space-y-2">
+        <div className="relative">
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Cerca nome, telefono, email, indirizzo..."
+            placeholder="Cerca nome, telefono, email..."
             className="input w-full pl-9"
           />
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
         </div>
-        <div className="flex gap-1 bg-[#0a0b12] border border-[#1a1c2e] rounded-lg p-0.5">
+        <div className="flex gap-1 bg-[#0a0b12] border border-[#1a1c2e] rounded-lg p-0.5 overflow-x-auto no-scrollbar">
           {STATUSES.map((s) => (
             <button
               key={s}
               onClick={() => setStatusFilter(s)}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition whitespace-nowrap ${
                 statusFilter === s
                   ? 'bg-indigo-600 text-white'
                   : 'text-slate-500 hover:text-slate-300'
@@ -252,11 +268,11 @@ export default function LeadPage() {
 
       {/* Barra azioni bulk */}
       {selectedIds.size > 0 && (
-        <div className="flex items-center gap-3 p-3 bg-indigo-950/30 border border-indigo-500/20 rounded-xl">
+        <div className="flex flex-wrap items-center gap-2 p-3 bg-indigo-950/30 border border-indigo-500/20 rounded-xl">
           <span className="text-sm text-indigo-300 font-medium">
-            {selectedIds.size} selezionati
+            {selectedIds.size} sel.
           </span>
-          <div className="flex-1" />
+          <div className="flex-1 min-w-0" />
           <button
             onClick={() => sendEmailToLeads(Array.from(selectedIds))}
             disabled={bulkLoading || sendingEmail}
@@ -305,6 +321,7 @@ export default function LeadPage() {
         selectedIds={selectedIds}
         onToggleSelect={toggleSelect}
         onToggleAll={toggleAll}
+        onQuickStatus={quickStatus}
       />
 
       {/* Log invio email */}
@@ -328,11 +345,11 @@ export default function LeadPage() {
       {/* Modale dettaglio lead */}
       {selected && (
         <div
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end md:items-center justify-center md:p-4 z-50"
           onClick={() => setSelected(null)}
         >
           <div
-            className="bg-[#0c0d15] border border-[#1a1c2e] rounded-2xl max-w-xl w-full max-h-[90vh] overflow-auto shadow-2xl"
+            className="bg-[#0c0d15] border-t md:border border-[#1a1c2e] rounded-t-2xl md:rounded-2xl max-w-xl w-full max-h-[85vh] md:max-h-[90vh] overflow-auto shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header modale */}
