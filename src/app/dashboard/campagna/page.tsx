@@ -10,6 +10,7 @@ type LiveLead = {
   business_type: string | null
   address: string | null
   phone: string | null
+  email: string | null
   rating: number | null
   review_count: number | null
   popularity_score: number | null
@@ -28,6 +29,10 @@ export default function CampagnaPage() {
   const [currentCampaign, setCurrentCampaign] = useState<Campaign | null>(null)
   const [liveLeads, setLiveLeads] = useState<LiveLead[]>([])
   const [currentCategory, setCurrentCategory] = useState<string>('')
+  const [catsDone, setCatsDone] = useState(0)
+  const [totalCats, setTotalCats] = useState(0)
+  const [startTime, setStartTime] = useState<number>(0)
+  const [skipped, setSkipped] = useState(0)
 
   useEffect(() => {
     void loadCampaigns()
@@ -77,6 +82,10 @@ export default function CampagnaPage() {
     setLogs([])
     setLiveLeads([])
     setCurrentCategory('')
+    setCatsDone(0)
+    setTotalCats(categories.length)
+    setStartTime(Date.now())
+    setSkipped(0)
     try {
       const createRes = await fetch('/api/campaigns', {
         method: 'POST',
@@ -124,12 +133,16 @@ export default function CampagnaPage() {
             const evt = JSON.parse(line)
             if (evt.type === 'log') {
               appendLog(evt.message)
+              if (typeof evt.message === 'string' && evt.message.includes('ha sito web, scartato')) {
+                setSkipped((s) => s + 1)
+              }
             } else if (evt.type === 'category-start') {
               setCurrentCategory(evt.category)
               appendLog(`▶ Categoria: ${evt.category}`)
             } else if (evt.type === 'lead') {
               setLiveLeads((cur) => [evt.lead, ...cur])
             } else if (evt.type === 'category-done') {
+              setCatsDone((c) => c + 1)
               appendLog(
                 `✅ [${evt.category}] ${evt.found} lead — totale ${evt.total}`,
               )
@@ -152,15 +165,16 @@ export default function CampagnaPage() {
     }
   }
 
-  async function sendEmails() {
-    if (!currentCampaign) return
+  async function sendEmails(campId?: string) {
+    const id = campId || currentCampaign?.id
+    if (!id) return
     setRunning(true)
     try {
       const res = await fetch('/api/send-emails', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          campaignId: currentCampaign.id,
+          campaignId: id,
           dailyLimit,
         }),
       })
@@ -315,7 +329,7 @@ export default function CampagnaPage() {
           </button>
           <button
             type="button"
-            onClick={sendEmails}
+            onClick={() => sendEmails()}
             disabled={running || !currentCampaign}
             className="btn-success"
           >
@@ -325,72 +339,15 @@ export default function CampagnaPage() {
       </form>
 
       {(running || liveLeads.length > 0) && (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
-            <div>
-              <h2 className="font-semibold text-slate-100">
-                Ricerca in corso
-                {currentCategory && (
-                  <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-indigo-600/30 border border-indigo-500/40 text-indigo-200">
-                    {currentCategory}
-                  </span>
-                )}
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                {liveLeads.length} lead trovati
-              </p>
-            </div>
-            {running && (
-              <div className="flex items-center gap-2 text-xs text-emerald-400">
-                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                scansione in corso
-              </div>
-            )}
-          </div>
-
-          {liveLeads.length > 0 && (
-            <div className="max-h-96 overflow-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-950/50 text-slate-400 text-[10px] uppercase tracking-wide sticky top-0">
-                  <tr>
-                    <th className="text-left px-4 py-2">Attività</th>
-                    <th className="text-left px-4 py-2">Indirizzo</th>
-                    <th className="text-left px-4 py-2">Telefono</th>
-                    <th className="text-left px-4 py-2 w-20">Score</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800">
-                  {liveLeads.map((l, i) => (
-                    <tr key={`${l.company_name}-${i}`} className="animate-fade-in">
-                      <td className="px-4 py-2.5">
-                        <div className="font-medium text-slate-100">
-                          {l.company_name}
-                        </div>
-                        <div className="text-xs text-slate-500">
-                          {l.business_type || l.sector}
-                          {l.rating != null && (
-                            <>
-                              {' · '}★ {l.rating.toFixed(1)} ({l.review_count})
-                            </>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-2.5 text-slate-400 text-xs max-w-xs truncate">
-                        {l.address || '—'}
-                      </td>
-                      <td className="px-4 py-2.5 text-slate-400 text-xs">
-                        {l.phone || '—'}
-                      </td>
-                      <td className="px-4 py-2.5 text-slate-300 font-mono text-xs">
-                        {l.popularity_score ?? '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        <ProgressPanel
+          running={running}
+          currentCategory={currentCategory}
+          liveLeads={liveLeads}
+          catsDone={catsDone}
+          totalCats={totalCats}
+          startTime={startTime}
+          skipped={skipped}
+        />
       )}
 
       {logs.length > 0 && (
@@ -410,40 +367,182 @@ export default function CampagnaPage() {
         <h2 className="text-lg font-semibold tracking-tight mb-3">Campagne</h2>
         <div className="card overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-slate-950/50 text-slate-400 text-xs uppercase tracking-wide">
+            <thead className="border-b border-[#16182a]">
               <tr>
-                <th className="text-left px-4 py-3">Nome</th>
-                <th className="text-left px-4 py-3">Categorie</th>
-                <th className="text-left px-4 py-3">Città</th>
-                <th className="text-left px-4 py-3">Lead</th>
-                <th className="text-left px-4 py-3">Inviate</th>
-                <th className="text-left px-4 py-3">Stato</th>
+                <th className="text-left px-4 py-3 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">Nome</th>
+                <th className="text-left px-4 py-3 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">Categorie</th>
+                <th className="text-left px-4 py-3 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">Città</th>
+                <th className="text-left px-4 py-3 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">Lead</th>
+                <th className="text-left px-4 py-3 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">Inviate</th>
+                <th className="text-left px-4 py-3 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">Azioni</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800">
+            <tbody>
               {campaigns.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="text-center px-4 py-6 text-slate-500">
+                  <td colSpan={6} className="text-center px-4 py-6 text-slate-600">
                     Nessuna campagna ancora.
                   </td>
                 </tr>
               )}
-              {campaigns.map((c) => (
-                <tr key={c.id} className="hover:bg-slate-800/40">
-                  <td className="px-4 py-3 font-medium">{c.name}</td>
-                  <td className="px-4 py-3 text-slate-400 max-w-xs truncate">
-                    {c.category}
+              {campaigns.map((c) => {
+                const isSelected = currentCampaign?.id === c.id
+                return (
+                  <tr
+                    key={c.id}
+                    className={`border-b border-[#12131e] transition-colors cursor-pointer ${isSelected ? 'bg-indigo-950/20' : 'hover:bg-[#0e0f18]'}`}
+                    onClick={() => setCurrentCampaign(c)}
+                  >
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />}
+                        <span className="font-medium text-slate-200">{c.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-slate-500 max-w-xs truncate text-xs">
+                      {c.category}
+                    </td>
+                    <td className="px-4 py-3 text-slate-400 text-xs">{c.city}</td>
+                    <td className="px-4 py-3 text-slate-300">{c.leads_found}</td>
+                    <td className="px-4 py-3 text-slate-300">{c.emails_sent}</td>
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => { setCurrentCampaign(c); void sendEmails(c.id) }}
+                        disabled={running}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 transition disabled:opacity-50"
+                      >
+                        Invia email
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ProgressPanel({
+  running,
+  currentCategory,
+  liveLeads,
+  catsDone,
+  totalCats,
+  startTime,
+  skipped,
+}: {
+  running: boolean
+  currentCategory: string
+  liveLeads: LiveLead[]
+  catsDone: number
+  totalCats: number
+  startTime: number
+  skipped: number
+}) {
+  const elapsed = Math.max(1, Math.floor((Date.now() - startTime) / 1000))
+  const pct = totalCats > 0 ? Math.round((catsDone / totalCats) * 100) : 0
+  const perCat = catsDone > 0 ? elapsed / catsDone : 0
+  const remaining = catsDone > 0 ? Math.round(perCat * (totalCats - catsDone)) : 0
+
+  function fmtTime(s: number) {
+    if (s < 60) return `${s}s`
+    const m = Math.floor(s / 60)
+    const sec = s % 60
+    return `${m}m ${sec}s`
+  }
+
+  const withPhone = liveLeads.filter((l) => l.phone).length
+  const withEmail = liveLeads.filter((l) => l.email).length
+
+  return (
+    <div className="card overflow-hidden">
+      {/* Header con barra progresso */}
+      <div className="p-5 border-b border-[#16182a]">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-3">
+            {running && <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />}
+            <h2 className="font-semibold text-slate-100 text-sm">
+              {running ? 'Scansione in corso' : 'Scansione completata'}
+            </h2>
+            {currentCategory && (
+              <span className="text-xs px-2 py-0.5 rounded-md bg-indigo-600/15 text-indigo-400 font-medium">
+                {currentCategory}
+              </span>
+            )}
+          </div>
+          <span className="text-xs text-slate-500 font-mono">
+            {fmtTime(elapsed)}
+          </span>
+        </div>
+
+        {/* Barra progresso */}
+        <div className="relative h-2 bg-[#12131e] rounded-full overflow-hidden">
+          <div
+            className="h-full bg-indigo-600 rounded-full transition-all duration-500"
+            style={{ width: running ? `${Math.max(pct, catsDone > 0 ? pct : 5)}%` : '100%' }}
+          />
+        </div>
+
+        <div className="flex items-center justify-between mt-2.5 text-[11px] text-slate-500">
+          <span>{catsDone}/{totalCats} categorie</span>
+          <div className="flex gap-4">
+            <span className="text-slate-300">{liveLeads.length} lead salvati</span>
+            {skipped > 0 && <span className="text-rose-400">{skipped} con sito (scartati)</span>}
+            {withPhone > 0 && <span className="text-emerald-400">{withPhone} con telefono</span>}
+            {withEmail > 0 && <span className="text-blue-400">{withEmail} con email</span>}
+          </div>
+          {running && remaining > 0 && (
+            <span>~{fmtTime(remaining)} rimanenti</span>
+          )}
+        </div>
+      </div>
+
+      {/* Tabella lead trovati */}
+      {liveLeads.length > 0 && (
+        <div className="max-h-80 overflow-auto">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-[#08090e]">
+              <tr className="border-b border-[#16182a]">
+                <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-slate-600 uppercase tracking-wider">Attivita</th>
+                <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-slate-600 uppercase tracking-wider">Contatti</th>
+                <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-slate-600 uppercase tracking-wider">Localita</th>
+                <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-slate-600 uppercase tracking-wider w-24">Recensioni</th>
+              </tr>
+            </thead>
+            <tbody>
+              {liveLeads.map((l, i) => (
+                <tr key={`${l.company_name}-${i}`} className="border-b border-[#12131e] animate-fade-in">
+                  <td className="px-4 py-2.5">
+                    <div className="font-medium text-slate-200 text-[13px]">{l.company_name}</div>
+                    <div className="text-[11px] text-slate-600">{l.business_type || l.sector}</div>
                   </td>
-                  <td className="px-4 py-3 text-slate-400">{c.city}</td>
-                  <td className="px-4 py-3">{c.leads_found}</td>
-                  <td className="px-4 py-3">{c.emails_sent}</td>
-                  <td className="px-4 py-3 text-slate-400">{c.status}</td>
+                  <td className="px-4 py-2.5 text-xs">
+                    {l.phone && <div className="text-slate-300">{l.phone}</div>}
+                    {l.email && <div className="text-slate-400 truncate max-w-[160px]">{l.email}</div>}
+                    {!l.phone && !l.email && <span className="text-slate-700">—</span>}
+                  </td>
+                  <td className="px-4 py-2.5 text-xs text-slate-500 max-w-[200px] truncate">
+                    {l.address || '—'}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    {l.rating != null ? (
+                      <div className="flex items-center gap-1">
+                        <span className="text-amber-400 text-xs font-semibold">{l.rating.toFixed(1)}</span>
+                        <span className="text-[11px] text-slate-600">({l.review_count ?? 0})</span>
+                      </div>
+                    ) : (
+                      <span className="text-slate-700 text-xs">—</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </div>
+      )}
     </div>
   )
 }

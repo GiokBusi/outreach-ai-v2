@@ -33,6 +33,7 @@ export type Lead = {
   rating: number | null
   review_count: number | null
   popularity_score: number | null
+  archived: boolean
   status: 'found' | 'sent' | 'opened' | 'replied' | 'interested' | 'not_interested'
   notes: string
   email_sent_at: string | null

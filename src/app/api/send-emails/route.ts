@@ -9,7 +9,7 @@ export const maxDuration = 300
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 export async function POST(req: NextRequest) {
-  const { campaignId, templateId, dailyLimit } = await req.json()
+  const { campaignId, templateId, dailyLimit, leadIds } = await req.json()
 
   const encoder = new TextEncoder()
   const stream = new ReadableStream({
@@ -31,15 +31,25 @@ export async function POST(req: NextRequest) {
           return
         }
 
-        // Load leads to send
-        const limit = Number(dailyLimit) || 50
-        const { data: leads, error: leadsErr } = await supabase
-          .from('leads')
-          .select('*')
-          .eq('campaign_id', campaignId)
-          .eq('status', 'found')
-          .not('email', 'is', null)
-          .limit(limit)
+        // Load leads to send — per ID specifici o per campagna
+        let leadsQuery
+        if (Array.isArray(leadIds) && leadIds.length > 0) {
+          leadsQuery = supabase
+            .from('leads')
+            .select('*')
+            .in('id', leadIds)
+            .not('email', 'is', null)
+        } else {
+          const limit = Number(dailyLimit) || 50
+          leadsQuery = supabase
+            .from('leads')
+            .select('*')
+            .eq('campaign_id', campaignId)
+            .eq('status', 'found')
+            .not('email', 'is', null)
+            .limit(limit)
+        }
+        const { data: leads, error: leadsErr } = await leadsQuery
 
         if (leadsErr) {
           send({ type: 'error', message: leadsErr.message })
@@ -54,11 +64,17 @@ export async function POST(req: NextRequest) {
           if (!lead.email) continue
           try {
             send({ type: 'log', message: `Personalizzo per ${lead.company_name}…` })
-            const personalized = await personalizeEmail(
-              template.body,
-              lead.company_name,
-              lead.sector || '',
-            )
+            let personalized: string
+            try {
+              personalized = await personalizeEmail(
+                template.body,
+                lead.company_name,
+                lead.sector || '',
+              )
+            } catch {
+              send({ type: 'log', message: `Gemini non disponibile, uso template base per ${lead.company_name}` })
+              personalized = template.body.replaceAll('[Nome]', lead.company_name)
+            }
 
             await sendEmail({
               to: lead.email,
